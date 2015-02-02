@@ -4,9 +4,9 @@
 
 function Shuffle () {
 
-	for (var i : int = 0; i < 52; i++)
+	for (var i : int = 0; i < 52 * deckCount; i++)
 	{
-		var m = Random.Range(0, 52);
+		var m = Random.Range(0, 52 * deckCount);
 		var temp : GameObject;
 		temp = deck [i];
 		deck [i] = deck [m];
@@ -20,13 +20,11 @@ function Deal (dealWho : String) {
 	
 	if (dealWho == "dealer")
 	{
+		timer = 0;
 		soundDeal.Play ();
 	
 		dealerHand[m] = deck[k];
 		dealerHandTotal +=  GetValue (dealerHand[m].tag);
-		
-		if (dealerHandTotal2 != 0)
-			dealerHandTotal2 +=  GetValue (dealerHand[m].tag);
 		
 		var clone = Instantiate (dealerHand[m], Vector3 (0 + m * 0.2343085, 3.043251, -m * 0.01), Quaternion.Euler (0,0,0));
 		clone.renderer.sortingOrder = zOrder + chipOrder;
@@ -38,11 +36,19 @@ function Deal (dealWho : String) {
 			clone.GetComponent(SpriteRenderer).sprite = closedCard;
 			clone.GetComponent(Card).closed = true;
 			
+			closedCount = GetCount (clone.tag);
+			
 			if (clone.tag == "ace")
 				closedHasAce = true;
 							
 			if (realDealerTotal == 21)
 				dealerBlackjack = true;
+		}
+		
+		else
+		{
+			runningCount += GetCount (deck [k].tag);
+			dealerFontSize = screenHeight/20;
 		}
 		
 		dealerAces = 0;
@@ -53,46 +59,39 @@ function Deal (dealWho : String) {
 				if (dealerHand[r].tag == "ace")
 					dealerAces ++;
 		}
+		
+		var realDealerSet : int = 0;
+		
+		for (var a : int = 0; a <= dealerAces; a++)
+		{
+			if (dealerHandTotal - a * 10 <= 21 && dealerHandTotal - a * 10 > 11)
+			{
+				realDealerTotal = dealerHandTotal - a * 10;
+			
+				realDealerSet++;
+			
+				if (dealerAces > 0)
+					dealerSoft = true;
+				
+				if (a == dealerAces && dealerAces != 0)
+					dealerSoft = false;
+			}
+		}
 
+		if (realDealerSet == 0)
+			realDealerTotal = dealerHandTotal - dealerAces * 10;
+			
+		if (m == 1 && dealerHandTotal == 11)
+			realDealerTotal = 11;
+			
 		//////////////////////////////////////////////////////
 		
 		if (dealerHand[0] != null)
 			if (dealerHand[0].tag != "ace")
 				insuranceOfferAnswered = true;
 		
-		if (dealerAces == 1)
-		{
-			dealerHandTotal2 = dealerHandTotal - 10;
-		}
-		
-		if (dealerAces == 2 && !dealerAces2Counted)
-		{
-			dealerHandTotal -= 10;
-			dealerHandTotal2 = dealerHandTotal - 10;
-			dealerAces2Counted = true;
-		}
-			
-		if (dealerAces == 3 && !dealerAces3Counted)
-		{
-			dealerHandTotal -= 10;
-			dealerHandTotal2 = dealerHandTotal - 10;
-			dealerAces3Counted = true;
-		}
-			
-		if (dealerAces == 4 && !dealerAces4Counted)
-		{
-			dealerHandTotal -= 10;
-			dealerHandTotal2 = dealerHandTotal - 10;
-			dealerAces3Counted = true;
-		}
-		
-		if (dealerHandTotal > 21 && dealerHandTotal2 != 0)
-			realDealerTotal = dealerHandTotal2;
-		
-		else
-			realDealerTotal = dealerHandTotal;
-		
 		clone.GetComponent(Card).owner = "Dealer";
+		clone.GetComponent(Card).cardOrder = m;
 
 		k++;
 		m++;
@@ -101,8 +100,9 @@ function Deal (dealWho : String) {
 	
 		for (var card : Card in cards) {
 			if (card.owner == "Dealer")
-			{
+		    {
 				card.offset = -m * 0.08;
+                card.currentCardOrder = m - 1;
 			}
 		}
 		
@@ -112,11 +112,41 @@ function Deal (dealWho : String) {
 		
 		if (realDealerTotal == 21 && m == 2)
 			dealerBlackjack = true;
+			
+		if (!split)
+		{
+			if ((playerStand || playerBusted || playerBlackjack || (dealerBlackjack && insuranceOfferAnswered)) && !closed)
+			{
+				dealerHandViewableTotal = realDealerTotal;
+			}
+			
+			else
+			{
+				if (dealerHand[0] != null)
+					dealerHandViewableTotal = GetValue(dealerHand[0].tag);
+			}
+		}
+		
+		if (split && dealCooldown <= 0)
+		{
+			if ((splitStand || splitBusted || (splitBlackjack && (playerBlackjack || playerBusted || playerStand )) || dealerBlackjack)  && !closed)
+			{
+				dealerHandViewableTotal = realDealerTotal;
+			}
+			
+			else
+			{
+				if (dealerHand[0] != null)
+					dealerHandViewableTotal = GetValue(dealerHand[0].tag);
+			}
+		}
 	}
 	
 	else if (dealWho == "player")
 	{
-	
+		timer = 0;
+		playerFontSize = screenHeight/20;
+		
 		swipeStart = Vector2 (-1000, -1000);
 		swipeEnd = Vector2 (-1000, -1000);
 		
@@ -124,25 +154,22 @@ function Deal (dealWho : String) {
 	
 		playerHand[j] = deck[k];
 		playerHandTotal +=  GetValue (playerHand[j].tag);
-		
-		if (playerHandTotal2 != 0)
-			playerHandTotal2 +=  GetValue (playerHand[j].tag);
 			
 		if (split)
 		{
-			var cardSplit = Instantiate (playerHand[j], Vector3 (-1.35 + j * 0.2343085, -2.724436 + j * 0.1843085, -j * 0.01), Quaternion.Euler (0,0,0));
+			var cardSplit = Instantiate (playerHand[j], Vector3 (-1.35 + j * 0.2343085, -2.52, -j * 0.01), Quaternion.Euler (0,0,0)); // + j * 0.1843085
 			cardSplit.renderer.sortingOrder = zOrder + chipOrder;
+			cardSplit.GetComponent(Card).cardOrder = j;
 			zOrder++;
-			
 		}
 		
 		else if (doubledDown)
-		{		
-		
+		{
 			var pieceRotation = Quaternion.AngleAxis(270, Vector3.forward);
-			var cardDoubledown = Instantiate (playerHand[j], Vector2 (0.1 + j * 0.3843085, -2.724436 + j * 0.1843085), pieceRotation);
+			var cardDoubledown = Instantiate (playerHand[j], Vector2 (0.1 + j * 0.3843085, -2.62), pieceRotation); //  + j * 0.1843085
 			cardDoubledown.renderer.sortingOrder = zOrder + chipOrder;
 			cardDoubledown.GetComponent(Card).perpendicular = true;
+			cardDoubledown.GetComponent(Card).cardOrder = j;
 			zOrder++;
 		}
 		
@@ -150,25 +177,30 @@ function Deal (dealWho : String) {
 		{
 			if (j == 0)
 			{
-				playerCard1 = Instantiate (playerHand[j], Vector3 (0.1 + j * 0.2343085, -2.984436 + j * 0.1843085, -j * 0.01), Quaternion.Euler(0,0,0));
+				playerCard1 = Instantiate (playerHand[j], Vector3 (0.1 + j * 0.2343085, -2.62, -j * 0.01), Quaternion.Euler(0,0,0)); //  + j * 0.1843085 // -2.984436
 				playerCard1.renderer.sortingOrder = zOrder + chipOrder;
+				playerCard1.GetComponent(Card).cardOrder = j;
 				zOrder++;
 			}
 				
 			else if (j == 1)
 			{
-				playerCard2 = Instantiate (playerHand[j], Vector3 (0.1 + j * 0.2343085, -2.984436 + j * 0.1843085, -j * 0.01), Quaternion.Euler(0,0,0));
+				playerCard2 = Instantiate (playerHand[j], Vector3 (0.1 + j * 0.2343085, -2.62, -j * 0.01), Quaternion.Euler(0,0,0)); //  + j * 0.1843085 // -2.984436
 				playerCard2.renderer.sortingOrder = zOrder + chipOrder;
+				playerCard2.GetComponent(Card).cardOrder = j;
 				zOrder++;
 			}
 				
 			else
 			{
-				var cardNormal = Instantiate (playerHand[j], Vector3 (0.1 + j * 0.2343085, -2.984436 + j * 0.1843085, -j * 0.01), Quaternion.Euler(0,0,0));
+				var cardNormal = Instantiate (playerHand[j], Vector3 (0.1 + j * 0.2343085, -2.62, -j * 0.01), Quaternion.Euler(0,0,0)); //  + j * 0.1843085 // -2.984436
 				cardNormal.renderer.sortingOrder = zOrder + chipOrder;
+				cardNormal.GetComponent(Card).cardOrder = j;
 				zOrder++;
 			}
 		}
+		
+		runningCount += GetCount (deck [k].tag);
 				
 		k++;
 		j++;
@@ -179,9 +211,10 @@ function Deal (dealWho : String) {
 			if (card.owner == "Player")
 			{
 				card.offset = -j * 0.09;
+                		card.currentCardOrder = j - 1;
 			}
 		}
-		
+
 		if (j == 2 && GetValue (playerHand[0].tag) == GetValue (playerHand[1].tag) )
 			splitable = true;
 	
@@ -193,44 +226,48 @@ function Deal (dealWho : String) {
 				if (playerHand[u].tag == "ace")
 					playerAces ++;
 		}
-
+		
+		var realPlayerSet : int = 0;
+		
+		for (var e : int = 0; e <= playerAces; e++)
+		{
+			if (playerHandTotal - e * 10 <= 21 && playerHandTotal - e * 10 > 11)
+			{
+				realPlayerTotal = playerHandTotal - e * 10;
+				
+				if (playerAces > 0)
+					playerSoft = true;
+				
+				if (e == playerAces && playerAces != 0)
+					playerSoft = false;
+				
+				realPlayerSet++;
+			}
+		}
+		
+		if (realPlayerSet == 0)
+			realPlayerTotal = playerHandTotal - playerAces * 10;
+			
+		if (j == 1 && playerHandTotal == 11)
+			realPlayerTotal = 11;
+			
+		if (showSwipeGesture && j == 2 && (realPlayerTotal < 17 || realPlayerTotal == 21) )
+		{
+			showSwipeGesture = false;
+			PlayerPrefs.SetInt("SwipeGestureShown", 0);
+		}
+		
+		if (showDoubleTap && j == 2 && realPlayerTotal > 11)
+		{
+			showDoubleTap = false;
+			PlayerPrefs.SetInt("DoubleTapShown", 0);
+		}
+				
 		//////////////////////////////////////////////////////
 		
 		if (dealerHand[0] != null)
 			if (dealerHand[0].tag != "ace")
 				insuranceOfferAnswered = true;
-		
-		if (playerAces == 1)
-		{
-			playerHandTotal2 = playerHandTotal - 10;
-		}
-		
-		if (playerAces == 2 && !playerAces2Counted)
-		{
-			playerHandTotal -= 10;
-			playerHandTotal2 = playerHandTotal - 10;
-			playerAces2Counted = true;
-		}
-			
-		if (playerAces == 3 && !playerAces3Counted)
-		{
-			playerHandTotal -= 10;
-			playerHandTotal2 = playerHandTotal - 10;
-			playerAces3Counted = true;
-		}
-			
-		if (playerAces == 4 && !playerAces4Counted)
-		{
-			playerHandTotal -= 10;
-			playerHandTotal2 = playerHandTotal - 10;
-			playerAces4Counted = true;
-		}
-		
-		if (playerHandTotal > 21 && playerHandTotal2 != 0)
-			realPlayerTotal = playerHandTotal2;
-		
-		else
-			realPlayerTotal = playerHandTotal;
 			
 		if (realPlayerTotal == 21 && insuranceOfferAnswered)
 		{
@@ -238,7 +275,7 @@ function Deal (dealWho : String) {
 			
 			if (j == 2 && split)
 			{
-				playerBlackjack = true;
+			//	playerBlackjack = true;
 				doneWithPlayer = true;
 				calculatedPlayerHand = true;
 			}
@@ -250,13 +287,36 @@ function Deal (dealWho : String) {
 	else if (dealWho == "split")
 	{
 		soundDeal.Play ();
+		splitFontSize = screenHeight/20;
+	
+		runningCount += GetCount (deck [k].tag);
+	
+		if (k == Mathf.RoundToInt(52 * deckCount * 1.0 * penetrationPercentage/100))
+		{
+			runningCount = 0;
+			shufflingSecs = 2;
+			dealCooldown = 1.5;
+			showCooldown = 1.5;
+			soundShortShuffle.Play();
+			Instantiate (refresh);
+			
+			for (var i : int = 0; i < 52 * deckCount; i++)
+			{
+				var m = Random.Range(0, 52 * deckCount);
+				var temp : GameObject;
+				temp = deck [i];
+				deck [i] = deck [m];
+				deck [m] = temp;
+			}
+			
+			k = 0;
+		}
 	
 		splitHand[y] = deck[k];
 		splitHandTotal +=  GetValue (splitHand[y].tag);
-		if (splitHandTotal2 != 0)
-			splitHandTotal2 +=  GetValue (splitHand[y].tag);
 			
-		var splitCard = Instantiate (splitHand[y], Vector3 (1.65 + y * 0.2343085, -2.724436 + y * 0.1843085, -y * 0.01), Quaternion.Euler(0,0,0));
+		var splitCard = Instantiate (splitHand[y], Vector3 (1.65 + y * 0.2343085, -2.52, -y * 0.01), Quaternion.Euler(0,0,0)); //  + y * 0.1843085
+        	splitCard.GetComponent(Card).cardOrder = y;
 		splitCard.renderer.sortingOrder = zOrder + chipOrder;
 		zOrder++;
 		
@@ -270,44 +330,36 @@ function Deal (dealWho : String) {
 				if (splitHand[b].tag == "ace")
 					splitAces ++;
 		}
+		
+		var realSplitSet : int = 0;
+		
+		for (var lel : int = 0; lel <= splitAces; lel++)
+		{
+			if (splitHandTotal - lel * 10 <= 21 && splitHandTotal - lel * 10 > 11)
+			{
+				realSplitTotal = splitHandTotal - lel * 10;
+				
+				realSplitSet++;
+			
+				if (splitAces > 0)
+					splitSoft = true;
+				
+				if (lel == splitAces && splitAces != 0)
+					splitSoft = false;
+			}
+		}
+		
+		if (realSplitSet == 0)
+			realSplitTotal = splitHandTotal - splitAces * 10;
+			
+		if (y == 1 && splitHandTotal == 11)
+			realSplitTotal = 11;
 
 		//////////////////////////////////////////////////////
 		
 		if (dealerHand[0] != null)
 			if (dealerHand[0].tag != "ace")
 				insuranceOfferAnswered = true;
-		
-		if (splitAces == 1)
-		{
-			splitHandTotal2 = splitHandTotal - 10;
-		}
-		
-		if (splitAces == 2 && !splitAces2Counted)
-		{
-			splitHandTotal -= 10;
-			splitHandTotal2 = splitHandTotal - 10;
-			splitAces2Counted = true;
-		}
-			
-		if (splitAces == 3 && !splitAces3Counted)
-		{
-			splitHandTotal -= 10;
-			splitHandTotal2 = splitHandTotal - 10;
-			splitAces3Counted = true;
-		}
-			
-		if (splitAces == 4 && !splitAces4Counted)
-		{
-			splitHandTotal -= 10;
-			splitHandTotal2 = splitHandTotal - 10;
-			splitAces4Counted = true;
-		}
-		
-		if (splitHandTotal > 21 && splitHandTotal2 != 0)
-			realSplitTotal = splitHandTotal2;
-		
-		else
-			realSplitTotal = splitHandTotal;
 		
 		k++;
 		y++;
@@ -316,12 +368,21 @@ function Deal (dealWho : String) {
 	
 		for (var card : Card in cards3) {
 			if (card.owner == "Split")
-			{
+		    {
+                card.currentCardOrder = y - 1;
 				card.offset = -y * 0.08;
-			}
+		    }
 		}
 		
 		dealCooldown = 0.8;
 		
+	}
+	
+	var cardsLeft : int = deckCount * 52 * penetrationPercentage/100 - k;
+	
+	if ( cardsLeft % 52 == 0)
+	{
+		cardLeftTimer = 3;
+		deckLeftTimer = 3;
 	}
 }
